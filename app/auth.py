@@ -1,5 +1,7 @@
 import requests
 import logging
+import re
+import unicodedata
 from datetime import datetime, timedelta, timezone
 from app import db, config
 
@@ -38,6 +40,20 @@ def _mask(value: str) -> str:
 
 
 _FORM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
+
+# Some copy/paste sources (especially RTL languages) insert invisible Unicode
+# marks or non-breaking spaces. Cognito then treats credentials as different
+# strings and responds with {"error":"invalid_client"}.
+_CRED_SANITIZE_RE = re.compile(
+    r"[\s\u00A0\u200B\u200C\u200D\u200E\u200F\u202A-\u202E\u2066-\u2069\uFEFF]+"
+)
+
+
+def _sanitize_credential(value: str) -> str:
+    if value is None:
+        return ""
+    value = unicodedata.normalize("NFKC", str(value))
+    return _CRED_SANITIZE_RE.sub("", value)
 
 
 def _post_safe(url: str, **kwargs) -> requests.Response | None:
@@ -96,8 +112,17 @@ def _build_strategies(primary_url: str, cid: str, secret: str):
 
 
 def _fetch_token():
-    cid = config.CREATORS_CREDENTIAL_ID.strip()
-    secret = config.CREATORS_CREDENTIAL_SECRET.strip()
+    raw_cid = config.CREATORS_CREDENTIAL_ID
+    raw_secret = config.CREATORS_CREDENTIAL_SECRET
+
+    cid = _sanitize_credential(raw_cid)
+    secret = _sanitize_credential(raw_secret)
+
+    if cid != str(raw_cid) or secret != str(raw_secret):
+        logger.warning(
+            "Creators credentials contained whitespace/invisible characters; "
+            "sanitized before OAuth request."
+        )
     url = config.TOKEN_URL
     version = config.CREATORS_VERSION
 
