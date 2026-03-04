@@ -94,19 +94,28 @@ def _bot_loop():
         time.sleep(config.CHECK_INTERVAL_SECONDS)
 
 
+INIT_RETRY_SECONDS = 30
+
+
 def _bot_thread_wrapper():
-    """Wrapper that decides whether to kill the process on crash."""
-    try:
-        _bot_loop()
-    except Exception as exc:
-        logger.critical("Bot thread crashed: %s", exc, exc_info=True)
-        if _bot_initialised:
-            # Bot was running fine then crashed — kill process so Render restarts.
-            os.kill(os.getpid(), signal.SIGTERM)
-        else:
-            # Initialisation failed (bad password, missing config, etc.)
-            # Keep the web panel alive so the user can fix settings.
-            logger.error("Bot failed to start — web panel remains available for configuration")
+    """Wrapper that retries init failures and kills on runtime crashes."""
+    while True:
+        try:
+            _bot_loop()
+        except Exception as exc:
+            logger.critical("Bot thread crashed: %s", exc, exc_info=True)
+            if _bot_initialised:
+                # Bot was running fine then crashed — kill process so Render restarts.
+                os.kill(os.getpid(), signal.SIGTERM)
+                return
+            else:
+                # Init failed (bad password, missing config, etc.)
+                # Keep panel alive and retry after a delay — user may fix via panel.
+                logger.error(
+                    "Bot failed to start — retrying in %ds (fix config via web panel)",
+                    INIT_RETRY_SECONDS,
+                )
+                time.sleep(INIT_RETRY_SECONDS)
 
 
 def main():
