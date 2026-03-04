@@ -5,6 +5,13 @@ from app import db, config
 
 logger = logging.getLogger(__name__)
 
+# All known Cognito token endpoints for the Creators API
+_COGNITO_ENDPOINTS = {
+    "us-east-1": "https://creatorsapi.auth.us-east-1.amazoncognito.com/oauth2/token",
+    "eu-south-2": "https://creatorsapi.auth.eu-south-2.amazoncognito.com/oauth2/token",
+    "us-west-2": "https://creatorsapi.auth.us-west-2.amazoncognito.com/oauth2/token",
+}
+
 
 def get_valid_token() -> str:
     """
@@ -43,16 +50,9 @@ def _post_safe(url: str, **kwargs) -> requests.Response | None:
         return None
 
 
-def _build_strategies(url: str, cid: str, secret: str, version: str):
-    """
-    Build an ordered list of (name, callable) auth strategies.
-    v2.x → Cognito endpoint (body creds, then Basic Auth).
-    v3.x → Same Cognito endpoint (all versions use Cognito).
-    """
-    strategies = []
-
-    # All versions: try Cognito with creatorsapi/default scope first
-    strategies.append(("Cognito+BodyCredentials", lambda: _post_safe(
+def _cognito_request(url: str, cid: str, secret: str) -> requests.Response | None:
+    """Try body-credentials against a Cognito endpoint."""
+    return _post_safe(
         url,
         data={
             "grant_type": "client_credentials",
@@ -60,12 +60,37 @@ def _build_strategies(url: str, cid: str, secret: str, version: str):
             "client_secret": secret,
             "scope": "creatorsapi/default",
         },
+    )
+
+
+def _build_strategies(primary_url: str, cid: str, secret: str):
+    """
+    Build an ordered list of (name, callable) auth strategies.
+    1. Primary Cognito endpoint (body creds, then Basic Auth).
+    2. All other Cognito regional endpoints as fallback.
+    """
+    strategies = []
+
+    # Primary endpoint — body credentials (most common)
+    strategies.append(("Cognito+BodyCredentials", lambda: _cognito_request(
+        primary_url, cid, secret,
     )))
+
+    # Primary endpoint — Basic Auth
     strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
-        url,
+        primary_url,
         data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
         auth=(cid, secret),
     )))
+
+    # Fallback: try other regional Cognito endpoints (credentials might be
+    # registered in a different region than the user selected)
+    for region, url in _COGNITO_ENDPOINTS.items():
+        if url == primary_url:
+            continue  # already tried
+        strategies.append((f"Cognito({region})+Body", lambda u=url: _cognito_request(
+            u, cid, secret,
+        )))
 
     return strategies
 
@@ -76,7 +101,7 @@ def _fetch_token():
     url = config.TOKEN_URL
     version = config.CREATORS_VERSION
 
-    strategies = _build_strategies(url, cid, secret, version)
+    strategies = _build_strategies(url, cid, secret)
 
     logger.info(
         "OAuth request → version=%s  url=%s  client_id=%s  client_secret=%s",
@@ -102,10 +127,14 @@ def _fetch_token():
                      last_resp.status_code, last_resp.text)
         if "invalid_client" in last_resp.text:
             logger.error(
-                "Hint: invalid_client usually means credentials are wrong, "
-                "have trailing whitespace, or the Creators API app is not "
-                "fully activated yet. Try regenerating credentials in "
-                "Associates Central → Tools → Creators API."
+                "Hint: invalid_client means the Cognito user pool does not "
+                "recognize these credentials. Common causes:\n"
+                "  1. Credentials were created in Amazon Developer Console "
+                "(LWA) instead of Associates Central → Creators API\n"
+                "  2. Credentials were regenerated — use the latest ones\n"
+                "  3. Creators API app not fully activated yet — contact "
+                "Amazon Associates support\n"
+                "  4. Trailing whitespace in credential values"
             )
         last_resp.raise_for_status()
     raise RuntimeError("All OAuth strategies failed due to network errors")
