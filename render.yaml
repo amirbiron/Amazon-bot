@@ -9,12 +9,17 @@ services:
       mountPath: /data
       sizeGB: 1
     envVars:
+      # ── Auto-generated (don't touch) ──────────────────────────────
       - key: FLASK_SECRET
         generateValue: true
       - key: PANEL_ACCESS_TOKEN
         generateValue: true
-      - key: MASTER_PASSWORD
+      # ── Developer sets these ──────────────────────────────────────
+      - key: TELEGRAM_BOT_TOKEN
         sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      # ── Optional tuning ───────────────────────────────────────────
       - key: DB_PATH
         value: /data/bot.db
       - key: CHECK_INTERVAL_SECONDS
@@ -23,3 +28,5 @@ services:
         value: "8"
       - key: MAX_PRICE_USD
         value: "180"
+      # NOTE: Amazon API credentials (CREATORS_API_*) are entered by
+      # the client via the web panel — NOT set here.

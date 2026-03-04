@@ -1,63 +1,71 @@
 """
-Encrypt / decrypt secrets using a master password.
-Uses PBKDF2 key derivation + Fernet (AES-128-CBC with HMAC).
+Encrypt / decrypt client secrets using an auto-generated key.
+The key lives on the persistent disk — not in env vars, not in git.
+No master password needed.
 """
-import base64
 import json
 import os
 
 from cryptography.fernet import Fernet, InvalidToken
-from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
-from cryptography.hazmat.primitives import hashes
-
-def _default_secrets_path() -> str:
-    """Put secrets.enc next to DB_PATH (persistent disk) if configured,
-    otherwise fall back to the project root."""
-    data_dir = os.getenv("DB_PATH")
-    if data_dir:
-        return os.path.join(os.path.dirname(data_dir), "secrets.enc")
-    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "secrets.enc")
 
 
-SECRETS_FILE = _default_secrets_path()
-SALT_SIZE = 16
-PBKDF2_ITERATIONS = 480_000
+def _data_dir() -> str:
+    """Resolve the persistent data directory (Render Disk or project root)."""
+    db_path = os.getenv("DB_PATH")
+    if db_path:
+        return os.path.dirname(db_path) or "."
+    return os.path.dirname(os.path.dirname(__file__))
 
 
-def _derive_key(password: str, salt: bytes) -> bytes:
-    kdf = PBKDF2HMAC(
-        algorithm=hashes.SHA256(),
-        length=32,
-        salt=salt,
-        iterations=PBKDF2_ITERATIONS,
-    )
-    return base64.urlsafe_b64encode(kdf.derive(password.encode()))
+def _key_path() -> str:
+    return os.path.join(_data_dir(), ".encryption.key")
 
 
-def encrypt_secrets(secrets: dict, master_password: str, path: str = SECRETS_FILE) -> None:
-    """Encrypt a dict of key-value secrets and write to disk."""
-    salt = os.urandom(SALT_SIZE)
-    key = _derive_key(master_password, salt)
-    f = Fernet(key)
+def _secrets_path() -> str:
+    return os.path.join(_data_dir(), "client_secrets.enc")
+
+
+def _get_or_create_key() -> bytes:
+    """Load the Fernet key from disk, or generate one on first use."""
+    path = _key_path()
+    if os.path.isfile(path):
+        with open(path, "rb") as f:
+            return f.read().strip()
+    key = Fernet.generate_key()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "wb") as f:
+        f.write(key)
+    return key
+
+
+def save_client_secrets(secrets: dict) -> None:
+    """Encrypt and write client secrets to disk."""
+    key = _get_or_create_key()
+    fernet = Fernet(key)
     payload = json.dumps(secrets).encode()
-    token = f.encrypt(payload)
-    with open(path, "wb") as fh:
-        fh.write(salt + token)
+    token = fernet.encrypt(payload)
+    path = _secrets_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "wb") as f:
+        f.write(token)
 
 
-def decrypt_secrets(master_password: str, path: str = SECRETS_FILE) -> dict:
-    """Read encrypted file and return the secrets dict.  Raises on wrong password."""
-    with open(path, "rb") as fh:
-        raw = fh.read()
-    salt, token = raw[:SALT_SIZE], raw[SALT_SIZE:]
-    key = _derive_key(master_password, salt)
-    f = Fernet(key)
+def load_client_secrets() -> dict:
+    """Read and decrypt client secrets.  Returns {} if file doesn't exist."""
+    path = _secrets_path()
+    if not os.path.isfile(path):
+        return {}
+    key = _get_or_create_key()
+    fernet = Fernet(key)
+    with open(path, "rb") as f:
+        token = f.read()
     try:
-        payload = f.decrypt(token)
+        payload = fernet.decrypt(token)
     except InvalidToken:
-        raise ValueError("סיסמה שגויה או קובץ פגום")
+        return {}
     return json.loads(payload)
 
 
-def secrets_file_exists(path: str = SECRETS_FILE) -> bool:
-    return os.path.isfile(path)
+def client_secrets_exist() -> bool:
+    return os.path.isfile(_secrets_path())
