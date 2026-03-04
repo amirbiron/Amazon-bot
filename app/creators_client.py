@@ -8,12 +8,11 @@ logger = logging.getLogger(__name__)
 _BASE = "https://creatorsapi.amazon/catalog/v1"
 
 _ITEM_RESOURCES = [
-    "ItemInfo.Title",
-    "Images.Primary.Medium",
-    "DetailPageURL",
-    "OffersV2.Listings.Price",
-    "OffersV2.Listings.Availability",
-    "OffersV2.Listings.MerchantInfo",
+    "itemInfo.title",
+    "images.primary.medium",
+    "offersV2.listings.price",
+    "offersV2.listings.availability",
+    "offersV2.listings.merchantInfo",
 ]
 
 _SEARCH_RESOURCES = _ITEM_RESOURCES[:]
