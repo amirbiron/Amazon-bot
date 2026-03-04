@@ -67,6 +67,31 @@ def load_client_secrets() -> dict:
     return json.loads(payload)
 
 
+def load_client_secrets_binary() -> dict:
+    """[Suggestion 8] Read and decrypt client secrets using strict binary mode
+    throughout to bypass any encoding issues that may occur in text-mode reading.
+    Returns {} if file doesn't exist or decryption fails."""
+    path = _secrets_path()
+    if not os.path.isfile(path):
+        return {}
+    key_path = _key_path()
+    if not os.path.isfile(key_path):
+        return {}
+    # Read key in binary mode
+    with open(key_path, "rb") as f:
+        key = f.read().strip()
+    fernet = Fernet(key)
+    # Read encrypted secrets in binary mode
+    with open(path, "rb") as f:
+        token = f.read()
+    try:
+        payload = fernet.decrypt(token)
+    except InvalidToken:
+        return {}
+    # Decode from raw bytes explicitly
+    return json.loads(payload.decode("utf-8"))
+
+
 def client_secrets_exist() -> bool:
     return os.path.isfile(_secrets_path())
 
