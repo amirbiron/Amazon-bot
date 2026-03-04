@@ -4,7 +4,8 @@ from app import config, fx
 
 logger = logging.getLogger(__name__)
 
-_TG_BASE = f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}"
+def _tg_base():
+    return f"https://api.telegram.org/bot{config.TELEGRAM_BOT_TOKEN}"
 
 
 def _escape_md2(text: str) -> str:
@@ -47,7 +48,7 @@ def send_alert(event_type: str, title: str, image_url: str | None,
     # Message 1: photo + caption (or text-only if no image)
     if image_url:
         resp = requests.post(
-            f"{_TG_BASE}/sendPhoto",
+            f"{_tg_base()}/sendPhoto",
             json={
                 "chat_id":    config.TELEGRAM_CHAT_ID,
                 "photo":      image_url,
@@ -58,7 +59,7 @@ def send_alert(event_type: str, title: str, image_url: str | None,
         )
     else:
         resp = requests.post(
-            f"{_TG_BASE}/sendMessage",
+            f"{_tg_base()}/sendMessage",
             json={
                 "chat_id":    config.TELEGRAM_CHAT_ID,
                 "text":       caption,
@@ -80,7 +81,7 @@ def send_alert(event_type: str, title: str, image_url: str | None,
         "הרכישה הינה על אחריות הקונה בלבד 🫶🏽❣️"
     )
     resp2 = requests.post(
-        f"{_TG_BASE}/sendMessage",
+        f"{_tg_base()}/sendMessage",
         json={
             "chat_id": config.TELEGRAM_CHAT_ID,
             "text":    disclaimer,

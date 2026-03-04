@@ -12,10 +12,21 @@
                 <span class="badge required">חובה</span>
                 {{ labels.get(key, key) }}
             </label>
+            {% if key == 'CREATORS_API_VERSION' %}
+            <select id="{{ key }}" name="{{ key }}" required>
+                {% for ver, ver_label in version_options.items() %}
+                <option value="{{ ver }}"
+                    {% if current.get(key, '') == ver %}selected{% endif %}>
+                    {{ ver_label }}
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
             <input type="{{ 'password' if 'SECRET' in key else 'text' }}"
                    id="{{ key }}" name="{{ key }}" required
                    value="{{ current.get(key, '') }}"
                    placeholder="{{ key }}">
+            {% endif %}
         </div>
         {% endfor %}
     </div>
