@@ -10,7 +10,16 @@ from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from cryptography.hazmat.primitives import hashes
 
-SECRETS_FILE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "secrets.enc")
+def _default_secrets_path() -> str:
+    """Put secrets.enc next to DB_PATH (persistent disk) if configured,
+    otherwise fall back to the project root."""
+    data_dir = os.getenv("DB_PATH")
+    if data_dir:
+        return os.path.join(os.path.dirname(data_dir), "secrets.enc")
+    return os.path.join(os.path.dirname(os.path.dirname(__file__)), "secrets.enc")
+
+
+SECRETS_FILE = _default_secrets_path()
 SALT_SIZE = 16
 PBKDF2_ITERATIONS = 480_000
 

@@ -2,13 +2,19 @@
 Secure settings web panel.
 Lets the client set / update encrypted environment-variable secrets
 through a browser — without exposing them to the developer.
+
+Security layers:
+1. PANEL_ACCESS_TOKEN — required to access any route (set as env var)
+2. Master password — encrypts/decrypts the actual secrets
+3. Rate limiting — locks out after repeated failed attempts
 """
 import hashlib
 import hmac
 import os
 import secrets as _secrets
+import time
 
-from flask import Flask, render_template, request, redirect, url_for, session, flash
+from flask import Flask, render_template, request, redirect, url_for, session, flash, abort
 
 from app.crypto import encrypt_secrets, decrypt_secrets, secrets_file_exists
 from app.secure_config import REQUIRED_KEYS, OPTIONAL_KEYS
@@ -19,9 +25,19 @@ app = Flask(
 )
 app.secret_key = os.getenv("FLASK_SECRET", _secrets.token_hex(32))
 
-# Encrypt session cookies (not just sign them)
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+
+# ── Access-token gate ─────────────────────────────────────────────────────────
+# Set PANEL_ACCESS_TOKEN env var to require ?token=<value> on first visit.
+# The token is stored in the session so subsequent requests don't need it.
+PANEL_ACCESS_TOKEN = os.getenv("PANEL_ACCESS_TOKEN")
+
+# ── Rate limiting (in-memory, per-process) ────────────────────────────────────
+_fail_counts: dict[str, int] = {}        # IP → consecutive failures
+_lockout_until: dict[str, float] = {}    # IP → unix timestamp
+MAX_FAILURES = 5
+LOCKOUT_SECONDS = 300                     # 5 minutes
 
 # Human-friendly labels (Hebrew)
 LABELS = {
@@ -62,6 +78,60 @@ def _validate_required(data: dict) -> list[str]:
     return [k for k in REQUIRED_KEYS if k not in data]
 
 
+def _check_rate_limit() -> bool:
+    """Return True if the request is rate-limited."""
+    ip = request.remote_addr or "unknown"
+    until = _lockout_until.get(ip, 0)
+    if time.time() < until:
+        return True
+    return False
+
+
+def _record_failure():
+    ip = request.remote_addr or "unknown"
+    _fail_counts[ip] = _fail_counts.get(ip, 0) + 1
+    if _fail_counts[ip] >= MAX_FAILURES:
+        _lockout_until[ip] = time.time() + LOCKOUT_SECONDS
+        _fail_counts[ip] = 0
+
+
+def _reset_failures():
+    ip = request.remote_addr or "unknown"
+    _fail_counts.pop(ip, None)
+    _lockout_until.pop(ip, None)
+
+
+# ── Auth middleware ────────────────────────────────────────────────────────────
+
+@app.before_request
+def _require_access_token():
+    """Gate every route behind PANEL_ACCESS_TOKEN when configured."""
+    if not PANEL_ACCESS_TOKEN:
+        return  # no token configured — local-only use
+
+    # Already authenticated this browser session
+    if session.get("_authed"):
+        return
+
+    # Check query-string token
+    token = request.args.get("token", "")
+    if token and hmac.compare_digest(token, PANEL_ACCESS_TOKEN):
+        session["_authed"] = True
+        session.permanent = True
+        return
+
+    # Not authenticated — show a minimal login page
+    if request.method == "POST" and request.form.get("access_token"):
+        submitted = request.form["access_token"].strip()
+        if hmac.compare_digest(submitted, PANEL_ACCESS_TOKEN):
+            session["_authed"] = True
+            session.permanent = True
+            return redirect(request.url)
+        flash("טוקן גישה שגוי", "error")
+
+    return render_template("auth_gate.html"), 401
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -78,6 +148,10 @@ def setup():
         return redirect(url_for("index"))
 
     if request.method == "POST":
+        if _check_rate_limit():
+            flash("יותר מדי ניסיונות — נסה שוב בעוד מספר דקות", "error")
+            return redirect(url_for("setup"))
+
         master = request.form.get("master_password", "").strip()
         confirm = request.form.get("confirm_password", "").strip()
         if len(master) < 8:
@@ -112,17 +186,19 @@ def edit():
 
     # ── Step 1: unlock with master password ───────────────────────────────
     if request.method == "POST" and "unlock" in request.form:
+        if _check_rate_limit():
+            flash("יותר מדי ניסיונות — נסה שוב בעוד מספר דקות", "error")
+            return redirect(url_for("edit"))
+
         master = request.form.get("master_password", "").strip()
         try:
             current = decrypt_secrets(master)
         except (ValueError, FileNotFoundError):
+            _record_failure()
             flash("סיסמה שגויה או אין קובץ הגדרות", "error")
             return redirect(url_for("edit"))
 
-        # Store a one-way hash — not the plaintext password.
-        # The actual password is embedded in a hidden form field on the
-        # edit page (same HTTPS request), so we only need the hash to
-        # verify the save request came from a legitimate unlock.
+        _reset_failures()
         session["_mp_hash"] = _hash_password(master)
         return render_template(
             "edit.html",
@@ -136,24 +212,20 @@ def edit():
 
     # ── Step 2: save edited values ────────────────────────────────────────
     if request.method == "POST" and "save" in request.form:
-        # Recover the master password from the hidden form field
         master = request.form.get("current_master_password", "").strip()
         expected_hash = session.pop("_mp_hash", None)
 
-        # Verify the password matches what was used to unlock
         if not master or not expected_hash or not hmac.compare_digest(
             _hash_password(master), expected_hash
         ):
             flash("שגיאת אימות — נסה שוב", "error")
             return redirect(url_for("edit"))
 
-        # Optional: change master password
         new_master = request.form.get("new_master_password", "").strip()
         if new_master:
             confirm = request.form.get("confirm_new_password", "").strip()
             if len(new_master) < 8:
                 flash("הסיסמה חייבת להכיל לפחות 8 תווים", "error")
-                # Re-store hash so user doesn't have to unlock again
                 session["_mp_hash"] = expected_hash
                 return redirect(url_for("edit"))
             if new_master != confirm:
@@ -179,13 +251,19 @@ def edit():
 @app.route("/test", methods=["POST"])
 def test_connection():
     """Quick connectivity test — decrypts and validates required keys exist."""
+    if _check_rate_limit():
+        flash("יותר מדי ניסיונות — נסה שוב בעוד מספר דקות", "error")
+        return redirect(url_for("index"))
+
     master = request.form.get("master_password", "").strip()
     try:
         data = decrypt_secrets(master)
     except (ValueError, FileNotFoundError):
+        _record_failure()
         flash("סיסמה שגויה או אין קובץ הגדרות", "error")
         return redirect(url_for("index"))
 
+    _reset_failures()
     missing = [k for k in REQUIRED_KEYS if k not in data]
     if missing:
         flash(f"שדות חסרים בהגדרות: {', '.join(missing)}", "error")
