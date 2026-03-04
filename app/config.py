@@ -30,7 +30,12 @@ _TOKEN_ENDPOINTS = {
     "2.2": "https://creatorsapi.auth.eu-south-2.amazoncognito.com/oauth2/token",   # EU
     "2.3": "https://creatorsapi.auth.us-west-2.amazoncognito.com/oauth2/token",    # FE
 }
-TOKEN_URL = _TOKEN_ENDPOINTS.get(CREATORS_VERSION, _TOKEN_ENDPOINTS["2.1"])
+if CREATORS_VERSION not in _TOKEN_ENDPOINTS:
+    raise ValueError(
+        f"Unsupported CREATORS_API_VERSION='{CREATORS_VERSION}'. "
+        f"Must be one of: {', '.join(_TOKEN_ENDPOINTS)}"
+    )
+TOKEN_URL = _TOKEN_ENDPOINTS[CREATORS_VERSION]
 
 # Telegram disclaimer text (sent as second message)
 DISCLAIMER_TEXT = (
