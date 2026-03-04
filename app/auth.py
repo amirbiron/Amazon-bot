@@ -33,7 +33,7 @@ def _fetch_token():
             "grant_type":    "client_credentials",
             "client_id":     config.CREATORS_CREDENTIAL_ID,
             "client_secret": config.CREATORS_CREDENTIAL_SECRET,
-            "scope":         "advertising::audiences",
+            "scope":         "creatorsapi/default",
         },
         timeout=15,
     )
