@@ -5,7 +5,7 @@ Single entry point — runs the config panel (Flask) + bot loop together.
 On Render (or any deployment with PORT env var):
   - Flask serves the config panel on $PORT
   - Bot loop runs in a background thread
-  - If secrets.enc doesn't exist yet, bot waits for user to configure via panel
+  - If client secrets don't exist yet, bot waits for client to configure via panel
 
 Locally without PORT:
   - Bot loop runs directly (no web panel)
@@ -25,39 +25,38 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# True once the bot has fully initialised (secrets loaded, DB ready).
+# True once the bot has fully initialised.
 _bot_initialised = False
 
+INIT_RETRY_SECONDS = 30
 
-def _wait_for_secrets():
-    """Block until secrets.enc exists or env vars are already set.
-    On a fresh deploy the user must create secrets via the web panel first."""
-    from app.crypto import secrets_file_exists
-    from app.secure_config import REQUIRED_KEYS
 
-    # If all required env vars are already present, no need to wait.
-    if all(os.getenv(k) for k in REQUIRED_KEYS):
+def _wait_for_config():
+    """Block until all required config is available.
+    On a fresh deploy the client must set credentials via the web panel first."""
+    from app.crypto import client_secrets_exist
+    from app.secure_config import ALL_REQUIRED_KEYS
+
+    # If all required env vars are already present, go
+    if all(os.getenv(k) for k in ALL_REQUIRED_KEYS):
         return
 
-    if secrets_file_exists():
-        return
-
-    logger.info("⏳ Waiting for secrets — open the config panel to set up credentials...")
-    while not secrets_file_exists():
+    # Wait for client to submit their credentials via the panel
+    logger.info("⏳ Waiting for client credentials — share the panel link with the client...")
+    while not client_secrets_exist():
         time.sleep(5)
-    logger.info("✅ secrets.enc detected — starting bot")
+    logger.info("✅ Client credentials detected — starting bot")
 
 
 def _bot_loop():
     """The main monitoring loop — runs forever in a thread (or directly)."""
     global _bot_initialised
 
-    # On fresh deploy, wait for the user to create secrets via the panel.
-    _wait_for_secrets()
+    _wait_for_config()
 
-    # Decrypt secrets.enc into env vars (if file exists & MASTER_PASSWORD is set)
-    from app.secure_config import load_into_env
-    load_into_env()
+    # Load client secrets into env vars
+    from app.secure_config import load_client_secrets_into_env
+    load_client_secrets_into_env()
 
     # Import modules that read os.environ at import time *after* env injection
     from app import db, config, catalog, monitor, fx
@@ -70,7 +69,7 @@ def _bot_loop():
     logger.info("FX rate loaded: 1 USD = %.4f ILS", rate)
 
     _bot_initialised = True
-    last_catalog_refresh = datetime.min  # force immediate catalog build
+    last_catalog_refresh = datetime.min
 
     while True:
         now = datetime.utcnow()
@@ -94,9 +93,6 @@ def _bot_loop():
         time.sleep(config.CHECK_INTERVAL_SECONDS)
 
 
-INIT_RETRY_SECONDS = 30
-
-
 def _bot_thread_wrapper():
     """Wrapper that retries init failures and kills on runtime crashes."""
     while True:
@@ -105,12 +101,11 @@ def _bot_thread_wrapper():
         except Exception as exc:
             logger.critical("Bot thread crashed: %s", exc, exc_info=True)
             if _bot_initialised:
-                # Bot was running fine then crashed — kill process so Render restarts.
+                # Runtime crash — kill process so Render restarts
                 os.kill(os.getpid(), signal.SIGTERM)
                 return
             else:
-                # Init failed (bad password, missing config, etc.)
-                # Keep panel alive and retry after a delay — user may fix via panel.
+                # Init failed — keep panel alive, retry after delay
                 logger.error(
                     "Bot failed to start — retrying in %ds (fix config via web panel)",
                     INIT_RETRY_SECONDS,

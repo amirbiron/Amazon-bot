@@ -1,4 +1,7 @@
-# Encrypted secrets (client-only, never commit)
+# Encrypted client secrets, keys & tokens (never commit)
+client_secrets.enc
+.encryption.key
+.panel_token
 secrets.enc
 
 # Python
