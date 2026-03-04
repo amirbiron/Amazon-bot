@@ -1,6 +1,6 @@
 import requests
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app import db, config
 
 logger = logging.getLogger(__name__)
@@ -16,13 +16,13 @@ def get_valid_token() -> str:
     """
     cached = db.get_token_cache()
     if cached:
-        expires_at = datetime.fromisoformat(cached["expires_at"])
-        if datetime.utcnow() < expires_at - timedelta(minutes=5):
+        expires_at = datetime.fromisoformat(cached["expires_at"]).replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) < expires_at - timedelta(minutes=5):
             return cached["access_token"]
 
     logger.info("Fetching new OAuth token...")
     token, expires_in = _fetch_token()
-    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in)
     db.set_token_cache(token, expires_at.isoformat())
     logger.info("New token cached, expires at %s", expires_at.isoformat())
     return token
@@ -45,40 +45,39 @@ def _build_strategies(url: str, cid: str, secret: str, version: str):
     """
     Build an ordered list of (name, callable) auth strategies.
     v2.x → Cognito endpoint (body creds, then Basic Auth).
-    v3.x → LWA endpoint with creatorsapi/default scope.
+    v3.x → Cognito first (same scope), then LWA fallback (no scope).
     """
     strategies = []
 
-    if version.startswith("2."):
-        # v2.x: Cognito endpoint
-        strategies.append(("Cognito+BodyCredentials", lambda: _post_safe(
-            url,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": cid,
-                "client_secret": secret,
-                "scope": "creatorsapi/default",
-            },
-        )))
-        strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
-            url,
-            data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
-            auth=(cid, secret),
-        )))
-    else:
-        # v3.x: LWA endpoint with creatorsapi scope
+    # All versions: try Cognito with creatorsapi/default scope first
+    strategies.append(("Cognito+BodyCredentials", lambda: _post_safe(
+        url,
+        data={
+            "grant_type": "client_credentials",
+            "client_id": cid,
+            "client_secret": secret,
+            "scope": "creatorsapi/default",
+        },
+    )))
+    strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
+        url,
+        data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
+        auth=(cid, secret),
+    )))
+
+    if not version.startswith("2."):
+        # v3.x: also try LWA as fallback (no scope for client_credentials)
         strategies.append(("LWA+BodyCredentials", lambda: _post_safe(
             _LWA_TOKEN_URL,
             data={
                 "grant_type": "client_credentials",
                 "client_id": cid,
                 "client_secret": secret,
-                "scope": "creatorsapi/default",
             },
         )))
         strategies.append(("LWA+BasicAuth", lambda: _post_safe(
             _LWA_TOKEN_URL,
-            data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
+            data={"grant_type": "client_credentials"},
             auth=(cid, secret),
         )))
 
@@ -93,10 +92,9 @@ def _fetch_token():
 
     strategies = _build_strategies(url, cid, secret, version)
 
-    effective_url = _LWA_TOKEN_URL if not version.startswith("2.") else url
     logger.info(
         "OAuth request → version=%s  url=%s  client_id=%s  client_secret=%s",
-        version, effective_url, _mask(cid), _mask(secret),
+        version, url, _mask(cid), _mask(secret),
     )
 
     last_resp = None

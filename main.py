@@ -16,7 +16,7 @@ import os
 import signal
 import threading
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 logging.basicConfig(
     level  = logging.INFO,
@@ -69,10 +69,10 @@ def _bot_loop():
     logger.info("FX rate loaded: 1 USD = %.4f ILS", rate)
 
     _bot_initialised = True
-    last_catalog_refresh = datetime.min
+    last_catalog_refresh = datetime.min.replace(tzinfo=timezone.utc)
 
     while True:
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         # ── Catalog refresh (every N hours) ────────────────────────────
         hours_since_refresh = (now - last_catalog_refresh).total_seconds() / 3600

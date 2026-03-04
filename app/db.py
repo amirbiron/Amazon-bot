@@ -1,6 +1,6 @@
 import sqlite3
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 DB_PATH = os.getenv("DB_PATH", "bot.db")
 
@@ -49,7 +49,7 @@ def init_db():
 # ── Products ──────────────────────────────────────────────────────────────────
 
 def upsert_product(asin, title, image_url, product_url):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute("""
             INSERT INTO products (asin, title, image_url, product_url, added_at, last_seen_in_catalog)
@@ -81,7 +81,7 @@ def get_state(asin):
 
 
 def update_state(asin, in_stock, price_usd):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute("""
             INSERT INTO product_state (asin, last_in_stock, last_price_usd, last_checked_at)
@@ -94,7 +94,7 @@ def update_state(asin, in_stock, price_usd):
 
 
 def mark_restock_alert(asin):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute(
             "UPDATE product_state SET last_restock_alert_at=? WHERE asin=?", (now, asin)
@@ -102,7 +102,7 @@ def mark_restock_alert(asin):
 
 
 def mark_price_alert(asin):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute(
             "UPDATE product_state SET last_price_alert_at=? WHERE asin=?", (now, asin)
@@ -118,7 +118,7 @@ def get_fx_rate():
 
 
 def set_fx_rate(rate):
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     with get_conn() as conn:
         conn.execute("""
             INSERT INTO fx_cache (id, usd_ils_rate, fetched_at) VALUES (1, ?, ?)
