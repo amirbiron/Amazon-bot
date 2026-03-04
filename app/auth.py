@@ -27,16 +27,23 @@ def get_valid_token() -> str:
 
 
 def _fetch_token():
-    resp = requests.post(
-        config.TOKEN_URL,
-        data={
-            "grant_type":    "client_credentials",
-            "client_id":     config.CREATORS_CREDENTIAL_ID,
-            "client_secret": config.CREATORS_CREDENTIAL_SECRET,
-            "scope":         "creatorsapi/default",
-        },
-        timeout=15,
+    payload = {
+        "grant_type":    "client_credentials",
+        "client_id":     config.CREATORS_CREDENTIAL_ID,
+        "client_secret": config.CREATORS_CREDENTIAL_SECRET,
+        "scope":         "creatorsapi/default",
+    }
+    # Debug: log what we're sending (mask the secret)
+    masked_id = config.CREATORS_CREDENTIAL_ID[:4] + "..." if config.CREATORS_CREDENTIAL_ID else "<empty>"
+    masked_secret = config.CREATORS_CREDENTIAL_SECRET[:4] + "..." if config.CREATORS_CREDENTIAL_SECRET else "<empty>"
+    logger.info(
+        "OAuth request → url=%s  client_id=%s  client_secret=%s  scope=%s",
+        config.TOKEN_URL, masked_id, masked_secret, payload["scope"],
     )
+
+    resp = requests.post(config.TOKEN_URL, data=payload, timeout=15)
+    if not resp.ok:
+        logger.error("OAuth response %s: %s", resp.status_code, resp.text)
     resp.raise_for_status()
     data = resp.json()
     return data["access_token"], int(data.get("expires_in", 3600))
