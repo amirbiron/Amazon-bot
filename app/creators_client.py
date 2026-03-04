@@ -5,7 +5,7 @@ from app import config
 
 logger = logging.getLogger(__name__)
 
-_BASE = "https://affiliate-program.amazon.com/api/v1"
+_BASE = "https://creatorsapi.amazon/catalog/v1"
 
 _ITEM_RESOURCES = [
     "ItemInfo.Title",
@@ -20,9 +20,11 @@ _SEARCH_RESOURCES = _ITEM_RESOURCES[:]
 
 
 def _headers(token):
+    version = config.CREATORS_VERSION
     return {
-        "Authorization": f"Bearer {token}",
+        "Authorization": f"Bearer {token}, Version {version}",
         "Content-Type":  "application/json",
+        "x-marketplace": config.MARKETPLACE,
     }
 
 
