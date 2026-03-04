@@ -5,9 +5,17 @@ from app import db, config
 
 logger = logging.getLogger(__name__)
 
-# Fallback token endpoints to try when the primary Cognito endpoint fails.
-# v3.1 credentials may use a different OAuth provider.
 _LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token"
+
+# Possible scopes to try on the LWA endpoint for v3.x credentials.
+# Amazon hasn't publicly documented the Creators API scope for LWA yet,
+# so we try several common patterns.
+_LWA_SCOPES = [
+    "creatorsapi::default",
+    "creatorsapi:default",
+    "profile",
+    "",  # no scope at all
+]
 
 
 def get_valid_token() -> str:
@@ -34,53 +42,64 @@ def _mask(value: str) -> str:
     return (value[:4] + "...") if value else "<empty>"
 
 
-def _try_cognito_basic(url: str, cid: str, secret: str) -> requests.Response:
-    """Strategy 1: Cognito with HTTP Basic Auth (works for v2.x credentials)."""
-    payload = {"grant_type": "client_credentials", "scope": "creatorsapi/default"}
-    return requests.post(url, data=payload, auth=(cid, secret), timeout=15)
+def _post_safe(url: str, **kwargs) -> requests.Response | None:
+    """POST with network-error resilience so the fallback loop continues."""
+    try:
+        return requests.post(url, timeout=15, **kwargs)
+    except requests.RequestException as exc:
+        logger.warning("Network error reaching %s: %s", url, exc)
+        return None
 
 
-def _try_cognito_body(url: str, cid: str, secret: str) -> requests.Response:
-    """Strategy 2: Cognito with credentials in POST body (client_secret_post)."""
-    payload = {
-        "grant_type": "client_credentials",
-        "scope": "creatorsapi/default",
-        "client_id": cid,
-        "client_secret": secret,
-    }
-    return requests.post(url, data=payload, timeout=15)
-
-
-def _try_lwa(cid: str, secret: str) -> requests.Response:
-    """Strategy 3: Login With Amazon endpoint (may be needed for v3.x credentials)."""
-    payload = {
-        "grant_type": "client_credentials",
-        "client_id": cid,
-        "client_secret": secret,
-        "scope": "creatorsapi/default",
-    }
-    return requests.post(_LWA_TOKEN_URL, data=payload, timeout=15)
+def _build_strategies(url: str, cid: str, secret: str, version: str):
+    """
+    Build an ordered list of (name, callable) auth strategies.
+    v2.x → only Cognito.  v3.x → only LWA (with scope probing).
+    """
+    strategies = []
+    if version.startswith("2."):
+        # Cognito with HTTP Basic Auth (proven for v2.x)
+        strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
+            url,
+            data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
+            auth=(cid, secret),
+        )))
+    else:
+        # v3.x credentials → LWA endpoint, try multiple scopes
+        for scope in _LWA_SCOPES:
+            payload = {
+                "grant_type": "client_credentials",
+                "client_id": cid,
+                "client_secret": secret,
+            }
+            if scope:
+                payload["scope"] = scope
+            label = f"LWA(scope={scope or '<none>'})"
+            # capture payload by value
+            strategies.append((label, lambda p=dict(payload): _post_safe(
+                _LWA_TOKEN_URL, data=p,
+            )))
+    return strategies
 
 
 def _fetch_token():
     cid = config.CREATORS_CREDENTIAL_ID
     secret = config.CREATORS_CREDENTIAL_SECRET
     url = config.TOKEN_URL
+    version = config.CREATORS_VERSION
 
-    strategies = [
-        ("Cognito+BasicAuth", lambda: _try_cognito_basic(url, cid, secret)),
-        ("Cognito+BodyParams", lambda: _try_cognito_body(url, cid, secret)),
-        ("LWA", lambda: _try_lwa(cid, secret)),
-    ]
+    strategies = _build_strategies(url, cid, secret, version)
 
     logger.info(
-        "OAuth request → url=%s  client_id=%s  client_secret=%s",
-        url, _mask(cid), _mask(secret),
+        "OAuth request → version=%s  url=%s  client_id=%s  client_secret=%s",
+        version, url, _mask(cid), _mask(secret),
     )
 
     last_resp = None
     for name, strategy in strategies:
         resp = strategy()
+        if resp is None:
+            continue  # network error, try next
         if resp.ok:
             data = resp.json()
             logger.info("OAuth succeeded with strategy: %s", name)
@@ -90,7 +109,8 @@ def _fetch_token():
         )
         last_resp = resp
 
-    # All strategies failed — raise the last error
-    logger.error("All OAuth strategies exhausted. Last response: %s %s",
-                 last_resp.status_code, last_resp.text)
-    last_resp.raise_for_status()
+    if last_resp is not None:
+        logger.error("All OAuth strategies exhausted. Last: %s %s",
+                     last_resp.status_code, last_resp.text)
+        last_resp.raise_for_status()
+    raise RuntimeError("All OAuth strategies failed due to network errors")
