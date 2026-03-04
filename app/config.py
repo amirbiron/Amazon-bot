@@ -17,6 +17,15 @@ API_VERSION_LABELS = {
     "3.1": "3.1 — North America (amazon.com, new credentials)",
 }
 
+# ── Map credential version → API version for Authorization header ────────────
+# v3.x credentials use the same API as the corresponding v2.x region.
+_API_VERSION_MAP = {
+    "2.1": "2.1",
+    "2.2": "2.2",
+    "2.3": "2.3",
+    "3.1": "2.1",   # v3.1 NA credentials → API version 2.1 (NA)
+}
+
 # ── Static constants ─────────────────────────────────────────────────────────
 CREATORS_API_BASE  = "https://affiliate-program.amazon.com/api/v1"
 MARKETPLACE        = "www.amazon.com"
@@ -41,6 +50,10 @@ _DYNAMIC = {
     "CREATORS_CREDENTIAL_ID":     lambda: os.environ["CREATORS_API_CREDENTIAL_ID"],
     "CREATORS_CREDENTIAL_SECRET": lambda: os.environ["CREATORS_API_CREDENTIAL_SECRET"],
     "CREATORS_VERSION":           lambda: os.environ["CREATORS_API_VERSION"],
+    "CREATORS_API_VERSION":       lambda: _API_VERSION_MAP.get(
+                                      os.environ["CREATORS_API_VERSION"],
+                                      os.environ["CREATORS_API_VERSION"],
+                                  ),
     "PARTNER_TAG":                lambda: os.environ["PAAPI_PARTNER_TAG"],
     "TELEGRAM_BOT_TOKEN":        lambda: os.environ["TELEGRAM_BOT_TOKEN"],
     "TELEGRAM_CHAT_ID":          lambda: os.environ["TELEGRAM_CHAT_ID"],
