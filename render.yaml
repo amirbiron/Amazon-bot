@@ -1,0 +1,25 @@
+services:
+  - type: worker
+    name: pokemon-tcg-alert-bot
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: CREATORS_API_CREDENTIAL_ID
+        sync: false
+      - key: CREATORS_API_CREDENTIAL_SECRET
+        sync: false
+      - key: CREATORS_API_VERSION
+        sync: false
+      - key: PAAPI_PARTNER_TAG
+        sync: false
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: TELEGRAM_CHAT_ID
+        sync: false
+      - key: CHECK_INTERVAL_SECONDS
+        value: "360"
+      - key: CATALOG_REFRESH_HOURS
+        value: "8"
+      - key: MAX_PRICE_USD
+        value: "180"
