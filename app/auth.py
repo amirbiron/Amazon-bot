@@ -5,18 +5,6 @@ from app import db, config
 
 logger = logging.getLogger(__name__)
 
-_LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token"
-
-# Possible scopes to try on the LWA endpoint for v3.x credentials.
-# Amazon hasn't publicly documented the Creators API scope for LWA yet,
-# so we try several common patterns.
-_LWA_SCOPES = [
-    "creatorsapi::default",
-    "creatorsapi:default",
-    "profile",
-    "",  # no scope at all
-]
-
 
 def get_valid_token() -> str:
     """
@@ -51,34 +39,33 @@ def _post_safe(url: str, **kwargs) -> requests.Response | None:
         return None
 
 
-def _build_strategies(url: str, cid: str, secret: str, version: str):
+def _build_strategies(url: str, cid: str, secret: str):
     """
     Build an ordered list of (name, callable) auth strategies.
-    v2.x → only Cognito.  v3.x → only LWA (with scope probing).
+    All versions use Cognito endpoint with client_credentials grant.
+    Strategy 1: credentials in request body (matches official SDK).
+    Strategy 2: HTTP Basic Auth fallback.
     """
     strategies = []
-    if version.startswith("2."):
-        # Cognito with HTTP Basic Auth (proven for v2.x)
-        strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
-            url,
-            data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
-            auth=(cid, secret),
-        )))
-    else:
-        # v3.x credentials → LWA endpoint, try multiple scopes
-        for scope in _LWA_SCOPES:
-            payload = {
-                "grant_type": "client_credentials",
-                "client_id": cid,
-                "client_secret": secret,
-            }
-            if scope:
-                payload["scope"] = scope
-            label = f"LWA(scope={scope or '<none>'})"
-            # capture payload by value
-            strategies.append((label, lambda p=dict(payload): _post_safe(
-                _LWA_TOKEN_URL, data=p,
-            )))
+
+    # Strategy 1 — credentials in body (official SDK method)
+    strategies.append(("Cognito+BodyCredentials", lambda: _post_safe(
+        url,
+        data={
+            "grant_type": "client_credentials",
+            "client_id": cid,
+            "client_secret": secret,
+            "scope": "creatorsapi/default",
+        },
+    )))
+
+    # Strategy 2 — HTTP Basic Auth fallback
+    strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
+        url,
+        data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
+        auth=(cid, secret),
+    )))
+
     return strategies
 
 
@@ -88,12 +75,11 @@ def _fetch_token():
     url = config.TOKEN_URL
     version = config.CREATORS_VERSION
 
-    strategies = _build_strategies(url, cid, secret, version)
+    strategies = _build_strategies(url, cid, secret)
 
-    effective_url = _LWA_TOKEN_URL if not version.startswith("2.") else url
     logger.info(
         "OAuth request → version=%s  url=%s  client_id=%s  client_secret=%s",
-        version, effective_url, _mask(cid), _mask(secret),
+        version, url, _mask(cid), _mask(secret),
     )
 
     last_resp = None

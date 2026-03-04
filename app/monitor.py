@@ -1,6 +1,7 @@
 import logging
 import time
-from datetime import datetime, timedelta
+import datetime as _dt
+from datetime import timedelta
 from app import db, config, auth, creators_client, telegram
 
 logger = logging.getLogger(__name__)
@@ -35,8 +36,10 @@ def _should_send_restock(prev, asin) -> bool:
     """Check cooldown to avoid spam."""
     if not prev or not prev["last_restock_alert_at"]:
         return True
-    last = datetime.fromisoformat(prev["last_restock_alert_at"])
-    return datetime.utcnow() - last > MIN_RESTOCK_COOLDOWN
+    last = _dt.datetime.fromisoformat(prev["last_restock_alert_at"])
+    if last.tzinfo is None:
+        last = last.replace(tzinfo=_dt.UTC)
+    return _dt.datetime.now(_dt.UTC) - last > MIN_RESTOCK_COOLDOWN
 
 
 def process_item(item):
@@ -59,7 +62,7 @@ def process_item(item):
 
     title       = product["title"]
     image_url   = _extract_image(item) or product["image_url"]
-    product_url = item.get("detailPageURL") or product["product_url"]
+    product_url = item.get("detailPageUrl") or product["product_url"]
 
     prev_in_stock  = bool(prev["last_in_stock"]) if prev else False
     prev_price     = float(prev["last_price_usd"]) if prev and prev["last_price_usd"] else None
