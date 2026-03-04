@@ -166,6 +166,18 @@ def setup():
             return redirect(url_for("setup"))
 
         save_client_secrets(data)
+
+        # Inject new values into os.environ so the running bot picks them up
+        from app.secure_config import load_client_secrets_into_env
+        load_client_secrets_into_env()
+
+        # Invalidate cached OAuth token — new credentials need a fresh token
+        try:
+            from app import db
+            db.clear_token_cache()
+        except Exception:
+            pass  # DB may not be initialised yet on first setup
+
         flash("ההגדרות נשמרו בהצלחה! הבוט יתחיל לעבוד תוך שניות.", "success")
         return redirect(url_for("index"))
 

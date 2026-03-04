@@ -55,10 +55,9 @@ def load_client_secrets_into_env() -> None:
 
     injected = 0
     for key, value in secrets.items():
-        if key not in os.environ:
-            os.environ[key] = str(value)
-            injected += 1
-    logger.info("Injected %d client secrets from encrypted store", injected)
+        os.environ[key] = str(value)
+        injected += 1
+    logger.info("Loaded %d client secrets from encrypted store into env", injected)
 
 
 def all_required_present() -> bool:

@@ -133,6 +133,11 @@ def get_token_cache():
         return conn.execute("SELECT * FROM auth_cache WHERE id=1").fetchone()
 
 
+def clear_token_cache():
+    with get_conn() as conn:
+        conn.execute("DELETE FROM auth_cache WHERE id=1")
+
+
 def set_token_cache(access_token, expires_at_iso):
     with get_conn() as conn:
         conn.execute("""
