@@ -67,6 +67,25 @@ def load_client_secrets() -> dict:
     return json.loads(payload)
 
 
+def load_client_secrets_raw_bytes() -> tuple[dict, bytes]:
+    """[Suggestion 8] Decrypt client secrets and return both the parsed dict
+    AND the raw decrypted bytes, so callers can inspect byte-level content
+    (e.g. detect encoding issues that json.loads silently normalises).
+    Returns ({}, b"") if file doesn't exist or decryption fails."""
+    path = _secrets_path()
+    if not os.path.isfile(path):
+        return {}, b""
+    key = _get_or_create_key()
+    fernet = Fernet(key)
+    with open(path, "rb") as f:
+        token = f.read()
+    try:
+        raw_payload = fernet.decrypt(token)
+    except InvalidToken:
+        return {}, b""
+    return json.loads(raw_payload.decode("utf-8")), raw_payload
+
+
 def client_secrets_exist() -> bool:
     return os.path.isfile(_secrets_path())
 
