@@ -1,22 +1,22 @@
 services:
-  - type: worker
+  - type: web
     name: pokemon-tcg-alert-bot
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
+    disk:
+      name: bot-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
-      - key: CREATORS_API_CREDENTIAL_ID
+      - key: FLASK_SECRET
+        generateValue: true
+      - key: PANEL_ACCESS_TOKEN
+        generateValue: true
+      - key: MASTER_PASSWORD
         sync: false
-      - key: CREATORS_API_CREDENTIAL_SECRET
-        sync: false
-      - key: CREATORS_API_VERSION
-        sync: false
-      - key: PAAPI_PARTNER_TAG
-        sync: false
-      - key: TELEGRAM_BOT_TOKEN
-        sync: false
-      - key: TELEGRAM_CHAT_ID
-        sync: false
+      - key: DB_PATH
+        value: /data/bot.db
       - key: CHECK_INTERVAL_SECONDS
         value: "360"
       - key: CATALOG_REFRESH_HOURS

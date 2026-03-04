@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}כניסה — פאנל הגדרות{% endblock %}
+{% block content %}
+<div class="lock-icon">🔑</div>
+<h1>גישה מוגנת</h1>
+<p class="subtitle">הזן את טוקן הגישה שקיבלת כדי להיכנס לפאנל ההגדרות</p>
+
+<div class="card">
+    <form method="POST">
+        <div class="field">
+            <label for="access_token">טוקן גישה</label>
+            <input type="password" id="access_token" name="access_token" required autofocus
+                   placeholder="הטוקן שהוגדר ב-PANEL_ACCESS_TOKEN">
+        </div>
+        <button type="submit" class="btn btn-primary btn-block">כניסה</button>
+    </form>
+</div>
+
+<div class="card" style="border-color:#1e3a5f;">
+    <p style="color:var(--muted); font-size:0.85rem; text-align:center;">
+        ניתן גם לגשת עם <code style="color:var(--accent)">?token=YOUR_TOKEN</code> בכתובת
+    </p>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+# Encrypted secrets (client-only, never commit)
+secrets.enc
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment
+.env
+
+# Database
+*.db
+
+# IDE
+.vscode/
+.idea/

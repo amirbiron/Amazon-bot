@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}הגדרה ראשונית — בוט{% endblock %}
+{% block content %}
+<h1>הגדרה ראשונית</h1>
+<p class="subtitle">הזן את המפתחות שלך — הם יוצפנו באופן מקומי עם סיסמת המאסטר שלך</p>
+
+<form method="POST" action="{{ url_for('setup') }}" id="setup-form">
+
+    <!-- Master Password -->
+    <div class="card">
+        <h3 class="section-title">🔑 סיסמת מאסטר</h3>
+        <p class="hint" style="margin-bottom:1rem;">שמור אותה במקום בטוח — בלעדיה אי אפשר לגשת להגדרות</p>
+        <div class="field">
+            <label for="master_password">סיסמה (לפחות 8 תווים)</label>
+            <input type="password" id="master_password" name="master_password" required minlength="8">
+        </div>
+        <div class="field">
+            <label for="confirm_password">אימות סיסמה</label>
+            <input type="password" id="confirm_password" name="confirm_password" required minlength="8">
+        </div>
+    </div>
+
+    <!-- Required Keys -->
+    <div class="card">
+        <h3 class="section-title">🔴 שדות חובה</h3>
+        {% for key in required_keys %}
+        <div class="field">
+            <label for="{{ key }}">
+                <span class="badge required">חובה</span>
+                {{ labels.get(key, key) }}
+            </label>
+            <input type="{{ 'password' if 'SECRET' in key or 'TOKEN' in key else 'text' }}"
+                   id="{{ key }}" name="{{ key }}" required
+                   placeholder="{{ key }}">
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Optional Keys -->
+    <div class="card">
+        <h3 class="section-title">⚙️ הגדרות אופציונליות</h3>
+        {% for key in optional_keys %}
+        <div class="field">
+            <label for="{{ key }}">
+                <span class="badge optional">אופציונלי</span>
+                {{ labels.get(key, key) }}
+            </label>
+            <input type="text" id="{{ key }}" name="{{ key }}"
+                   placeholder="{{ defaults.get(key, '') }}">
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="actions">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">ביטול</a>
+        <button type="submit" class="btn btn-primary">🔐 הצפן ושמור</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('setup-form').addEventListener('submit', function(e) {
+    const pw = document.getElementById('master_password').value;
+    const confirm = document.getElementById('confirm_password').value;
+    if (pw !== confirm) {
+        e.preventDefault();
+        alert('הסיסמאות אינן תואמות');
+    }
+});
+</script>
+{% endblock %}
