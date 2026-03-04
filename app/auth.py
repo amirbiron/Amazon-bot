@@ -5,6 +5,8 @@ from app import db, config
 
 logger = logging.getLogger(__name__)
 
+_LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token"
+
 
 def get_valid_token() -> str:
     """
@@ -42,26 +44,43 @@ def _post_safe(url: str, **kwargs) -> requests.Response | None:
 def _build_strategies(url: str, cid: str, secret: str, version: str):
     """
     Build an ordered list of (name, callable) auth strategies.
-    All versions use the Cognito endpoint with creatorsapi/default scope.
+    v2.x → Cognito endpoint (body creds, then Basic Auth).
+    v3.x → LWA endpoint with creatorsapi/default scope.
     """
     strategies = []
 
-    # All versions (2.x and 3.x) use the Cognito endpoint with creatorsapi scope.
-    # The correct Cognito URL is resolved per-version in config._TOKEN_ENDPOINTS.
-    strategies.append(("Cognito+BodyCredentials", lambda: _post_safe(
-        url,
-        data={
-            "grant_type": "client_credentials",
-            "client_id": cid,
-            "client_secret": secret,
-            "scope": "creatorsapi/default",
-        },
-    )))
-    strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
-        url,
-        data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
-        auth=(cid, secret),
-    )))
+    if version.startswith("2."):
+        # v2.x: Cognito endpoint
+        strategies.append(("Cognito+BodyCredentials", lambda: _post_safe(
+            url,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": cid,
+                "client_secret": secret,
+                "scope": "creatorsapi/default",
+            },
+        )))
+        strategies.append(("Cognito+BasicAuth", lambda: _post_safe(
+            url,
+            data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
+            auth=(cid, secret),
+        )))
+    else:
+        # v3.x: LWA endpoint with creatorsapi scope
+        strategies.append(("LWA+BodyCredentials", lambda: _post_safe(
+            _LWA_TOKEN_URL,
+            data={
+                "grant_type": "client_credentials",
+                "client_id": cid,
+                "client_secret": secret,
+                "scope": "creatorsapi/default",
+            },
+        )))
+        strategies.append(("LWA+BasicAuth", lambda: _post_safe(
+            _LWA_TOKEN_URL,
+            data={"grant_type": "client_credentials", "scope": "creatorsapi/default"},
+            auth=(cid, secret),
+        )))
 
     return strategies
 
@@ -74,9 +93,10 @@ def _fetch_token():
 
     strategies = _build_strategies(url, cid, secret, version)
 
+    effective_url = _LWA_TOKEN_URL if not version.startswith("2.") else url
     logger.info(
         "OAuth request → version=%s  url=%s  client_id=%s  client_secret=%s",
-        version, url, _mask(cid), _mask(secret),
+        version, effective_url, _mask(cid), _mask(secret),
     )
 
     last_resp = None
