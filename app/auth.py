@@ -5,8 +5,6 @@ from app import db, config
 
 logger = logging.getLogger(__name__)
 
-_LWA_TOKEN_URL = "https://api.amazon.com/auth/o2/token"
-
 
 def get_valid_token() -> str:
     """
@@ -32,8 +30,12 @@ def _mask(value: str) -> str:
     return (value[:4] + "...") if value else "<empty>"
 
 
+_FORM_HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
+
+
 def _post_safe(url: str, **kwargs) -> requests.Response | None:
     """POST with network-error resilience so the fallback loop continues."""
+    kwargs.setdefault("headers", _FORM_HEADERS)
     try:
         return requests.post(url, timeout=15, **kwargs)
     except requests.RequestException as exc:
@@ -45,7 +47,7 @@ def _build_strategies(url: str, cid: str, secret: str, version: str):
     """
     Build an ordered list of (name, callable) auth strategies.
     v2.x → Cognito endpoint (body creds, then Basic Auth).
-    v3.x → Cognito first (same scope), then LWA fallback (no scope).
+    v3.x → Same Cognito endpoint (all versions use Cognito).
     """
     strategies = []
 
@@ -65,28 +67,12 @@ def _build_strategies(url: str, cid: str, secret: str, version: str):
         auth=(cid, secret),
     )))
 
-    if not version.startswith("2."):
-        # v3.x: also try LWA as fallback (no scope for client_credentials)
-        strategies.append(("LWA+BodyCredentials", lambda: _post_safe(
-            _LWA_TOKEN_URL,
-            data={
-                "grant_type": "client_credentials",
-                "client_id": cid,
-                "client_secret": secret,
-            },
-        )))
-        strategies.append(("LWA+BasicAuth", lambda: _post_safe(
-            _LWA_TOKEN_URL,
-            data={"grant_type": "client_credentials"},
-            auth=(cid, secret),
-        )))
-
     return strategies
 
 
 def _fetch_token():
-    cid = config.CREATORS_CREDENTIAL_ID
-    secret = config.CREATORS_CREDENTIAL_SECRET
+    cid = config.CREATORS_CREDENTIAL_ID.strip()
+    secret = config.CREATORS_CREDENTIAL_SECRET.strip()
     url = config.TOKEN_URL
     version = config.CREATORS_VERSION
 
@@ -114,5 +100,12 @@ def _fetch_token():
     if last_resp is not None:
         logger.error("All OAuth strategies exhausted. Last: %s %s",
                      last_resp.status_code, last_resp.text)
+        if "invalid_client" in last_resp.text:
+            logger.error(
+                "Hint: invalid_client usually means credentials are wrong, "
+                "have trailing whitespace, or the Creators API app is not "
+                "fully activated yet. Try regenerating credentials in "
+                "Associates Central → Tools → Creators API."
+            )
         last_resp.raise_for_status()
     raise RuntimeError("All OAuth strategies failed due to network errors")
