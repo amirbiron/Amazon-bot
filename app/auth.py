@@ -90,9 +90,10 @@ def _fetch_token():
 
     strategies = _build_strategies(url, cid, secret, version)
 
+    effective_url = _LWA_TOKEN_URL if not version.startswith("2.") else url
     logger.info(
         "OAuth request → version=%s  url=%s  client_id=%s  client_secret=%s",
-        version, url, _mask(cid), _mask(secret),
+        version, effective_url, _mask(cid), _mask(secret),
     )
 
     last_resp = None
