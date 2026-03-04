@@ -1,6 +1,6 @@
 import requests
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from app import db
 
 logger = logging.getLogger(__name__)
@@ -17,8 +17,8 @@ def get_usd_ils_rate() -> float:
     """
     cached = db.get_fx_rate()
     if cached:
-        fetched_at = datetime.fromisoformat(cached["fetched_at"])
-        if datetime.utcnow() - fetched_at < timedelta(hours=_CACHE_HOURS):
+        fetched_at = datetime.fromisoformat(cached["fetched_at"]).replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) - fetched_at < timedelta(hours=_CACHE_HOURS):
             return float(cached["usd_ils_rate"])
 
     try:
