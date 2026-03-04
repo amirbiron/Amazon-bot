@@ -64,6 +64,10 @@ def _bot_loop():
     logger.info("🚀 Pokemon TCG Alert Bot starting...")
     db.init_db()
 
+    # Clear cached OAuth token to force a fresh token fetch
+    db.clear_token_cache()
+    logger.info("🔑 Auth cache cleared — will fetch fresh OAuth token")
+
     # Pre-warm FX rate
     rate = fx.get_usd_ils_rate()
     logger.info("FX rate loaded: 1 USD = %.4f ILS", rate)
