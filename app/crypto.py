@@ -69,3 +69,32 @@ def load_client_secrets() -> dict:
 
 def client_secrets_exist() -> bool:
     return os.path.isfile(_secrets_path())
+
+
+# ── Access token on disk (overrides PANEL_ACCESS_TOKEN env var) ───────────────
+
+def _token_path() -> str:
+    return os.path.join(_data_dir(), ".panel_token")
+
+
+def save_access_token(token: str) -> None:
+    """Save a new access token to the persistent disk."""
+    path = _token_path()
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w") as f:
+        f.write(token)
+
+
+def load_access_token() -> str | None:
+    """Load the client-set access token from disk, or None if not set."""
+    path = _token_path()
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r") as f:
+        return f.read().strip() or None
+
+
+def client_owns_token() -> bool:
+    """True if the client has already changed the access token."""
+    return os.path.isfile(_token_path())

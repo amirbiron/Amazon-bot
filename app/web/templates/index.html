@@ -5,6 +5,17 @@
 <h1>פאנל הגדרות הבוט</h1>
 <p class="subtitle">הזן את פרטי ה-Amazon API שלך — הם מוצפנים ונשמרים בצורה מאובטחת</p>
 
+{% if not owns_token %}
+<div class="card" style="border-color:var(--error); background:#450a0a;">
+    <h3 class="section-title" style="color:var(--error);">⚠️ שלב ראשון: החלף טוקן גישה</h3>
+    <p style="margin-bottom:1rem; color:var(--text);">
+        הטוקן הנוכחי נוצר על ידי המפתח — כדי שרק לך תהיה גישה לפאנל,
+        <strong>החלף אותו עכשיו</strong> לפני שתזין את הפרטים שלך.
+    </p>
+    <a href="{{ url_for('change_token') }}" class="btn btn-primary btn-block">🔑 החלף טוקן עכשיו</a>
+</div>
+{% endif %}
+
 <div class="card">
     {% if has_secrets %}
         <h3 class="section-title">✅ הגדרות קיימות</h3>
@@ -17,12 +28,18 @@
     {% endif %}
 </div>
 
+{% if owns_token %}
+<div style="text-align:center; margin-top:0.5rem;">
+    <a href="{{ url_for('change_token') }}" style="color:var(--muted); font-size:0.85rem;">🔑 החלף טוקן גישה</a>
+</div>
+{% endif %}
+
 <div class="card" style="border-color:#1e3a5f;">
     <h3 class="section-title" style="color:var(--accent);">🔒 איך זה עובד?</h3>
     <ul style="list-style:none; line-height:2;">
-        <li>🔑 רק מי שקיבל את קישור הגישה יכול להיכנס לפאנל</li>
+        <li>🔑 החלף את טוקן הגישה — מרגע ההחלפה רק אתה נכנס</li>
         <li>🔐 הפרטים שלך מוצפנים ונשמרים על דיסק מוגן</li>
-        <li>👁️ למפתח אין גישה לפרטי ה-API שלך</li>
+        <li>👁️ למפתח אין גישה לפרטי ה-API שלך ולא לפאנל</li>
         <li>🚀 הבוט מתחיל לעבוד אוטומטית ברגע ששמרת</li>
     </ul>
 </div>

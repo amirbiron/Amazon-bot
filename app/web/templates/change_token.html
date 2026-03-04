@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block title %}החלפת טוקן גישה — בוט{% endblock %}
+{% block content %}
+<div class="lock-icon">🔑</div>
+<h1>החלף טוקן גישה</h1>
+<p class="subtitle">בחר טוקן חדש שרק אתה תדע — מרגע ההחלפה, הטוקן הישן לא יעבוד יותר</p>
+
+<form method="POST" action="{{ url_for('change_token') }}" id="token-form">
+    <div class="card">
+        <div class="field">
+            <label for="new_token">טוקן חדש (לפחות 12 תווים)</label>
+            <input type="text" id="new_token" name="new_token" required minlength="12"
+                   value="{{ suggested }}" dir="ltr">
+            <p class="hint">הצענו טוקן אקראי — אפשר להשתמש בו או לבחור אחר. שמור אותו!</p>
+        </div>
+        <div class="field">
+            <label for="confirm_token">אימות טוקן</label>
+            <input type="text" id="confirm_token" name="confirm_token" required minlength="12"
+                   dir="ltr">
+        </div>
+    </div>
+
+    <div class="actions">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">אחר כך</a>
+        <button type="submit" class="btn btn-primary">🔐 החלף טוקן</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('token-form').addEventListener('submit', function(e) {
+    const t = document.getElementById('new_token').value;
+    const c = document.getElementById('confirm_token').value;
+    if (t !== c) {
+        e.preventDefault();
+        alert('הטוקנים אינם תואמים');
+    }
+});
+</script>
+{% endblock %}
