@@ -22,8 +22,15 @@ PRICE_DROP_PERCENT = 0.05   # 5%
 
 # API
 CREATORS_API_BASE  = "https://affiliate-program.amazon.com/api/v1"
-TOKEN_URL          = "https://api.amazon.com/auth/o2/token"
 MARKETPLACE        = "www.amazon.com"
+
+# Creators API OAuth token endpoint — varies by credential version (region)
+_TOKEN_ENDPOINTS = {
+    "2.1": "https://creatorsapi.auth.us-east-1.amazoncognito.com/oauth2/token",   # NA
+    "2.2": "https://creatorsapi.auth.eu-south-2.amazoncognito.com/oauth2/token",   # EU
+    "2.3": "https://creatorsapi.auth.us-west-2.amazoncognito.com/oauth2/token",    # FE
+}
+TOKEN_URL = _TOKEN_ENDPOINTS.get(CREATORS_VERSION, _TOKEN_ENDPOINTS["2.1"])
 
 # Telegram disclaimer text (sent as second message)
 DISCLAIMER_TEXT = (
