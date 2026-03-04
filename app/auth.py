@@ -162,11 +162,10 @@ def _check_ntp_clock_drift() -> None:
     try:
         # Build a minimal NTP v3 client request (mode 3)
         data = b"\x1b" + 47 * b"\0"
-        sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        sock.settimeout(5)
-        sock.sendto(data, (NTP_SERVER, NTP_PORT))
-        resp, _ = sock.recvfrom(1024)
-        sock.close()
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.settimeout(5)
+            sock.sendto(data, (NTP_SERVER, NTP_PORT))
+            resp, _ = sock.recvfrom(1024)
 
         # Extract transmit timestamp (bytes 40-47)
         if len(resp) >= 48:
@@ -222,8 +221,9 @@ def _verify_base64_encoding(cid: str, secret: str) -> None:
     raw = f"{cid}:{secret}".encode("utf-8")
     b64 = base64.b64encode(raw).decode("ascii")
     logger.info(
-        "[Diagnostic] Base64 of client_id:client_secret = %s...%s  (length=%d)",
-        b64[:8], b64[-4:], len(b64),
+        "[Diagnostic] Base64 of client_id:client_secret — length=%d, "
+        "starts with %s...",
+        len(b64), b64[:8],
     )
 
 
@@ -281,32 +281,40 @@ def _run_diagnostics(raw_cid: str, raw_secret: str, cid: str, secret: str) -> No
 
 
 def _check_binary_credential_reading() -> None:
-    """[Suggestion 8] Attempt to read credentials from encrypted file in binary
-    mode and compare with the values loaded via the normal text path."""
+    """[Suggestion 8] Read raw decrypted bytes from the secrets file and check
+    for encoding anomalies (e.g. BOM, non-UTF-8 bytes, non-ASCII in values)
+    that json.loads may silently normalise."""
     try:
-        from app.crypto import load_client_secrets_binary
-        binary_secrets = load_client_secrets_binary()
-        if not binary_secrets:
+        from app.crypto import load_client_secrets_raw_bytes
+        parsed, raw_bytes = load_client_secrets_raw_bytes()
+        if not parsed:
             logger.debug("[Diagnostic] No client secrets file — skipping binary read check")
             return
 
-        text_cid = os.environ.get("CREATORS_API_CREDENTIAL_ID", "")
-        text_secret = os.environ.get("CREATORS_API_CREDENTIAL_SECRET", "")
-        bin_cid = binary_secrets.get("CREATORS_API_CREDENTIAL_ID", "")
-        bin_secret = binary_secrets.get("CREATORS_API_CREDENTIAL_SECRET", "")
+        # Check for UTF-8 BOM
+        if raw_bytes.startswith(b"\xef\xbb\xbf"):
+            logger.warning("[Diagnostic] Secrets file contains a UTF-8 BOM prefix!")
 
-        if text_cid != bin_cid:
-            logger.warning(
-                "[Diagnostic] client_id MISMATCH between text and binary read! "
-                "text len=%d, binary len=%d", len(text_cid), len(bin_cid),
-            )
-        if text_secret != bin_secret:
-            logger.warning(
-                "[Diagnostic] client_secret MISMATCH between text and binary read! "
-                "text len=%d, binary len=%d", len(text_secret), len(bin_secret),
-            )
-        if text_cid == bin_cid and text_secret == bin_secret:
-            logger.debug("[Diagnostic] Binary read matches text read — OK")
+        # Check each credential value at the byte level
+        for key in ("CREATORS_API_CREDENTIAL_ID", "CREATORS_API_CREDENTIAL_SECRET"):
+            val = parsed.get(key, "")
+            env_val = os.environ.get(key, "")
+            raw_encoded = val.encode("utf-8")
+            non_ascii = [b for b in raw_encoded if b > 127]
+            if non_ascii:
+                logger.warning(
+                    "[Diagnostic] %s from secrets file contains %d non-ASCII "
+                    "byte(s) in raw payload",
+                    key, len(non_ascii),
+                )
+            if val != env_val:
+                logger.warning(
+                    "[Diagnostic] %s MISMATCH: secrets file (len=%d) vs "
+                    "env var (len=%d) — possible encoding divergence",
+                    key, len(val), len(env_val),
+                )
+            else:
+                logger.debug("[Diagnostic] %s — secrets file matches env var", key)
     except Exception as exc:
         logger.warning("[Diagnostic] Binary read check failed: %s", exc)
 
@@ -314,10 +322,6 @@ def _check_binary_credential_reading() -> None:
 def _fetch_token():
     raw_cid = config.CREATORS_CREDENTIAL_ID
     raw_secret = config.CREATORS_CREDENTIAL_SECRET
-
-    # [Suggestion 1] Validate raw credential characters before sanitization
-    _validate_credential_chars("raw client_id", str(raw_cid))
-    _validate_credential_chars("raw client_secret", str(raw_secret))
 
     cid = _sanitize_credential(raw_cid)
     secret = _sanitize_credential(raw_secret)
@@ -327,9 +331,6 @@ def _fetch_token():
             "Creators credentials contained whitespace/invisible characters; "
             "sanitized before OAuth request."
         )
-
-    # [Suggestion 5] Log credential lengths
-    _log_credential_lengths(raw_cid, raw_secret, cid, secret)
 
     url = config.TOKEN_URL
     version = config.CREATORS_VERSION
