@@ -28,11 +28,12 @@ def get_valid_token() -> str:
 
 def _fetch_token():
     payload = {
-        "grant_type":    "client_credentials",
-        "client_id":     config.CREATORS_CREDENTIAL_ID,
-        "client_secret": config.CREATORS_CREDENTIAL_SECRET,
-        "scope":         "creatorsapi/default",
+        "grant_type": "client_credentials",
+        "scope":      "creatorsapi/default",
     }
+    # Cognito requires client credentials via HTTP Basic Auth
+    auth = (config.CREATORS_CREDENTIAL_ID, config.CREATORS_CREDENTIAL_SECRET)
+
     # Debug: log what we're sending (mask the secret)
     masked_id = config.CREATORS_CREDENTIAL_ID[:4] + "..." if config.CREATORS_CREDENTIAL_ID else "<empty>"
     masked_secret = config.CREATORS_CREDENTIAL_SECRET[:4] + "..." if config.CREATORS_CREDENTIAL_SECRET else "<empty>"
@@ -41,7 +42,7 @@ def _fetch_token():
         config.TOKEN_URL, masked_id, masked_secret, payload["scope"],
     )
 
-    resp = requests.post(config.TOKEN_URL, data=payload, timeout=15)
+    resp = requests.post(config.TOKEN_URL, data=payload, auth=auth, timeout=15)
     if not resp.ok:
         logger.error("OAuth response %s: %s", resp.status_code, resp.text)
     resp.raise_for_status()
