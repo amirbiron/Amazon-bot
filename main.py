@@ -5,7 +5,6 @@ Entry point — runs forever as a background worker.
 import logging
 import time
 from datetime import datetime, timedelta
-from app import db, config, catalog, monitor, fx
 
 logging.basicConfig(
     level  = logging.INFO,
@@ -16,6 +15,13 @@ logger = logging.getLogger(__name__)
 
 
 def main():
+    # Decrypt secrets.enc into env vars (if file exists & MASTER_PASSWORD is set)
+    from app.secure_config import load_into_env
+    load_into_env()
+
+    # Import modules that read os.environ at import time *after* env injection
+    from app import db, config, catalog, monitor, fx
+
     logger.info("🚀 Pokemon TCG Alert Bot starting...")
     db.init_db()
 

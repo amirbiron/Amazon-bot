@@ -1,10 +1,23 @@
 services:
+  # ── Config panel (one-off web service for the client) ──────────────────
+  - type: web
+    name: pokemon-tcg-config-panel
+    runtime: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python config_panel.py --port $PORT
+    envVars:
+      - key: FLASK_SECRET
+        generateValue: true
+
+  # ── Main bot (background worker) ───────────────────────────────────────
   - type: worker
     name: pokemon-tcg-alert-bot
     runtime: python
     buildCommand: pip install -r requirements.txt
     startCommand: python main.py
     envVars:
+      - key: MASTER_PASSWORD
+        sync: false
       - key: CREATORS_API_CREDENTIAL_ID
         sync: false
       - key: CREATORS_API_CREDENTIAL_SECRET

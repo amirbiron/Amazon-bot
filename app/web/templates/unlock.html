@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}פתיחת הגדרות — בוט{% endblock %}
+{% block content %}
+<div class="lock-icon">🔓</div>
+<h1>עריכת הגדרות</h1>
+<p class="subtitle">הזן את סיסמת המאסטר כדי לפתוח את ההגדרות לעריכה</p>
+
+<div class="card">
+    <form method="POST" action="{{ url_for('edit') }}">
+        <div class="field">
+            <label for="master_password">סיסמת מאסטר</label>
+            <input type="password" id="master_password" name="master_password" required autofocus>
+        </div>
+        <button type="submit" name="unlock" value="1" class="btn btn-primary btn-block">🔓 פתח</button>
+    </form>
+</div>
+
+<div style="text-align:center; margin-top:1rem;">
+    <a href="{{ url_for('index') }}" class="btn btn-secondary">חזרה</a>
+</div>
+{% endblock %}

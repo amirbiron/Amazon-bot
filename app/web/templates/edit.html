@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block title %}עריכת הגדרות — בוט{% endblock %}
+{% block content %}
+<h1>עריכת הגדרות</h1>
+<p class="subtitle">ערוך את ההגדרות הקיימות — אפשר גם להחליף סיסמת מאסטר</p>
+
+<form method="POST" action="{{ url_for('edit') }}" id="edit-form">
+
+    <!-- Optional: change master password -->
+    <div class="card" style="border-color:#1e3a5f;">
+        <h3 class="section-title">🔑 החלפת סיסמת מאסטר (אופציונלי)</h3>
+        <p class="hint" style="margin-bottom:1rem;">השאר ריק כדי לשמור את הסיסמה הנוכחית</p>
+        <div class="field">
+            <label for="new_master_password">סיסמה חדשה</label>
+            <input type="password" id="new_master_password" name="new_master_password" minlength="8">
+        </div>
+        <div class="field">
+            <label for="confirm_new_password">אימות סיסמה חדשה</label>
+            <input type="password" id="confirm_new_password" name="confirm_new_password" minlength="8">
+        </div>
+    </div>
+
+    <!-- Required Keys -->
+    <div class="card">
+        <h3 class="section-title">🔴 שדות חובה</h3>
+        {% for key in required_keys %}
+        <div class="field">
+            <label for="{{ key }}">
+                <span class="badge required">חובה</span>
+                {{ labels.get(key, key) }}
+            </label>
+            <input type="{{ 'password' if 'SECRET' in key or 'TOKEN' in key else 'text' }}"
+                   id="{{ key }}" name="{{ key }}" required
+                   value="{{ current.get(key, '') }}">
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Optional Keys -->
+    <div class="card">
+        <h3 class="section-title">⚙️ הגדרות אופציונליות</h3>
+        {% for key in optional_keys %}
+        <div class="field">
+            <label for="{{ key }}">
+                <span class="badge optional">אופציונלי</span>
+                {{ labels.get(key, key) }}
+            </label>
+            <input type="text" id="{{ key }}" name="{{ key }}"
+                   value="{{ current.get(key, '') }}"
+                   placeholder="{{ defaults.get(key, '') }}">
+        </div>
+        {% endfor %}
+    </div>
+
+    <div class="actions">
+        <a href="{{ url_for('index') }}" class="btn btn-secondary">ביטול</a>
+        <button type="submit" name="save" value="1" class="btn btn-primary">💾 שמור שינויים</button>
+    </div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('edit-form').addEventListener('submit', function(e) {
+    const pw = document.getElementById('new_master_password').value;
+    const confirm = document.getElementById('confirm_new_password').value;
+    if (pw && pw !== confirm) {
+        e.preventDefault();
+        alert('הסיסמאות החדשות אינן תואמות');
+    }
+});
+</script>
+{% endblock %}
