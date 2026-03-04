@@ -46,7 +46,7 @@ def load_into_env() -> None:
         secrets = decrypt_secrets(master)
     except ValueError as exc:
         logger.error("Failed to decrypt secrets: %s", exc)
-        raise SystemExit("Cannot start: wrong master password") from exc
+        raise RuntimeError("Cannot start: wrong master password") from exc
 
     injected = 0
     for key, value in secrets.items():
