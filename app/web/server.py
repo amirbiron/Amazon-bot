@@ -21,6 +21,7 @@ from app.crypto import (
     save_access_token, load_access_token, client_owns_token,
 )
 from app.secure_config import CLIENT_KEYS
+from app.config import API_VERSION_LABELS
 
 app = Flask(
     __name__,
@@ -187,4 +188,5 @@ def setup():
         client_keys=CLIENT_KEYS,
         labels=LABELS,
         current=current,
+        version_options=API_VERSION_LABELS,
     )

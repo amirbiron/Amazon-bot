@@ -6,6 +6,15 @@ _TOKEN_ENDPOINTS = {
     "2.1": "https://creatorsapi.auth.us-east-1.amazoncognito.com/oauth2/token",   # NA
     "2.2": "https://creatorsapi.auth.eu-south-2.amazoncognito.com/oauth2/token",   # EU
     "2.3": "https://creatorsapi.auth.us-west-2.amazoncognito.com/oauth2/token",    # FE
+    "3.1": "https://creatorsapi.auth.us-east-1.amazoncognito.com/oauth2/token",   # NA (v3 credentials)
+}
+
+# Human-readable labels for each version (used in the setup dropdown)
+API_VERSION_LABELS = {
+    "2.1": "2.1 — North America (amazon.com)",
+    "2.2": "2.2 — Europe (amazon.co.uk / .de / .fr …)",
+    "2.3": "2.3 — Far East (amazon.co.jp / .com.au …)",
+    "3.1": "3.1 — North America (amazon.com, new credentials)",
 }
 
 # ── Static constants ─────────────────────────────────────────────────────────
