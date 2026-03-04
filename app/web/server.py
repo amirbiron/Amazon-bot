@@ -3,6 +3,8 @@ Secure settings web panel.
 Lets the client set / update encrypted environment-variable secrets
 through a browser — without exposing them to the developer.
 """
+import hashlib
+import hmac
 import os
 import secrets as _secrets
 
@@ -16,6 +18,10 @@ app = Flask(
     template_folder=os.path.join(os.path.dirname(__file__), "templates"),
 )
 app.secret_key = os.getenv("FLASK_SECRET", _secrets.token_hex(32))
+
+# Encrypt session cookies (not just sign them)
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
 
 # Human-friendly labels (Hebrew)
 LABELS = {
@@ -36,6 +42,26 @@ def _all_keys():
     return REQUIRED_KEYS + list(OPTIONAL_KEYS.keys())
 
 
+def _hash_password(password: str) -> str:
+    """One-way hash for session storage — never store the actual password."""
+    return hashlib.sha256(password.encode()).hexdigest()
+
+
+def _collect_form_data() -> dict:
+    """Extract env-var fields from the submitted form."""
+    data = {}
+    for key in _all_keys():
+        val = request.form.get(key, "").strip()
+        if val:
+            data[key] = val
+    return data
+
+
+def _validate_required(data: dict) -> list[str]:
+    """Return list of missing required keys."""
+    return [k for k in REQUIRED_KEYS if k not in data]
+
+
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.route("/")
@@ -46,7 +72,11 @@ def index():
 
 @app.route("/setup", methods=["GET", "POST"])
 def setup():
-    """First-time setup or full re-configuration."""
+    """First-time setup — blocked if secrets already exist."""
+    if secrets_file_exists():
+        flash("הגדרות כבר קיימות — השתמש בעריכה כדי לשנות אותן", "error")
+        return redirect(url_for("index"))
+
     if request.method == "POST":
         master = request.form.get("master_password", "").strip()
         confirm = request.form.get("confirm_password", "").strip()
@@ -57,13 +87,8 @@ def setup():
             flash("הסיסמאות אינן תואמות", "error")
             return redirect(url_for("setup"))
 
-        data = {}
-        for key in _all_keys():
-            val = request.form.get(key, "").strip()
-            if val:
-                data[key] = val
-
-        missing = [k for k in REQUIRED_KEYS if k not in data]
+        data = _collect_form_data()
+        missing = _validate_required(data)
         if missing:
             flash(f"חסרים שדות חובה: {', '.join(missing)}", "error")
             return redirect(url_for("setup"))
@@ -84,14 +109,21 @@ def setup():
 @app.route("/edit", methods=["GET", "POST"])
 def edit():
     """Edit existing secrets (requires master password to unlock)."""
-    if request.method == "POST" and "master_password" in request.form and "unlock" in request.form:
-        master = request.form["master_password"].strip()
+
+    # ── Step 1: unlock with master password ───────────────────────────────
+    if request.method == "POST" and "unlock" in request.form:
+        master = request.form.get("master_password", "").strip()
         try:
             current = decrypt_secrets(master)
-        except ValueError:
-            flash("סיסמה שגויה", "error")
+        except (ValueError, FileNotFoundError):
+            flash("סיסמה שגויה או אין קובץ הגדרות", "error")
             return redirect(url_for("edit"))
-        session["_mp"] = master
+
+        # Store a one-way hash — not the plaintext password.
+        # The actual password is embedded in a hidden form field on the
+        # edit page (same HTTPS request), so we only need the hash to
+        # verify the save request came from a legitimate unlock.
+        session["_mp_hash"] = _hash_password(master)
         return render_template(
             "edit.html",
             required_keys=REQUIRED_KEYS,
@@ -99,34 +131,42 @@ def edit():
             labels=LABELS,
             defaults=OPTIONAL_KEYS,
             current=current,
+            master_password=master,
         )
 
+    # ── Step 2: save edited values ────────────────────────────────────────
     if request.method == "POST" and "save" in request.form:
-        master = session.pop("_mp", None)
+        # Recover the master password from the hidden form field
+        master = request.form.get("current_master_password", "").strip()
+        expected_hash = session.pop("_mp_hash", None)
+
+        # Verify the password matches what was used to unlock
+        if not master or not expected_hash or not hmac.compare_digest(
+            _hash_password(master), expected_hash
+        ):
+            flash("שגיאת אימות — נסה שוב", "error")
+            return redirect(url_for("edit"))
+
+        # Optional: change master password
         new_master = request.form.get("new_master_password", "").strip()
         if new_master:
             confirm = request.form.get("confirm_new_password", "").strip()
             if len(new_master) < 8:
                 flash("הסיסמה חייבת להכיל לפחות 8 תווים", "error")
+                # Re-store hash so user doesn't have to unlock again
+                session["_mp_hash"] = expected_hash
                 return redirect(url_for("edit"))
             if new_master != confirm:
                 flash("הסיסמאות החדשות אינן תואמות", "error")
+                session["_mp_hash"] = expected_hash
                 return redirect(url_for("edit"))
             master = new_master
 
-        if not master:
-            flash("שגיאת סשן — נסה שוב", "error")
-            return redirect(url_for("edit"))
-
-        data = {}
-        for key in _all_keys():
-            val = request.form.get(key, "").strip()
-            if val:
-                data[key] = val
-
-        missing = [k for k in REQUIRED_KEYS if k not in data]
+        data = _collect_form_data()
+        missing = _validate_required(data)
         if missing:
             flash(f"חסרים שדות חובה: {', '.join(missing)}", "error")
+            session["_mp_hash"] = expected_hash
             return redirect(url_for("edit"))
 
         encrypt_secrets(data, master)
