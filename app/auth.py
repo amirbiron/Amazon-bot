@@ -1,0 +1,42 @@
+import requests
+import logging
+from datetime import datetime, timedelta
+from app import db, config
+
+logger = logging.getLogger(__name__)
+
+
+def get_valid_token() -> str:
+    """
+    Returns a valid Bearer token.
+    Uses cached token from DB if still valid (with 5-min buffer).
+    Fetches a new one when expired.
+    """
+    cached = db.get_token_cache()
+    if cached:
+        expires_at = datetime.fromisoformat(cached["expires_at"])
+        if datetime.utcnow() < expires_at - timedelta(minutes=5):
+            return cached["access_token"]
+
+    logger.info("Fetching new OAuth token...")
+    token, expires_in = _fetch_token()
+    expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+    db.set_token_cache(token, expires_at.isoformat())
+    logger.info("New token cached, expires at %s", expires_at.isoformat())
+    return token
+
+
+def _fetch_token():
+    resp = requests.post(
+        config.TOKEN_URL,
+        data={
+            "grant_type":    "client_credentials",
+            "client_id":     config.CREATORS_CREDENTIAL_ID,
+            "client_secret": config.CREATORS_CREDENTIAL_SECRET,
+            "scope":         "advertising::audiences",
+        },
+        timeout=15,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    return data["access_token"], int(data.get("expires_in", 3600))
