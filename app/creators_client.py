@@ -19,11 +19,10 @@ _SEARCH_RESOURCES = _ITEM_RESOURCES[:]
 
 
 def _headers(token):
-    version = config.CREATORS_VERSION
-    tag = config.PARTNER_TAG
-    logger.info(
-        "API request headers → Version=%s  partnerTag=%s  marketplace=%s  token=%s...",
-        version, tag, config.MARKETPLACE, token[:12] if token else "<none>",
+    version = config.CREATORS_API_VERSION
+    logger.debug(
+        "API headers → Version=%s  partnerTag=%s  marketplace=%s",
+        version, config.PARTNER_TAG, config.MARKETPLACE,
     )
     return {
         "Authorization": f"Bearer {token}, Version {version}",
