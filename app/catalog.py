@@ -73,7 +73,7 @@ def run_catalog_refresh():
 
                 # All good — save to catalog
                 image_url   = _extract_image(item)
-                product_url = item.get("detailPageURL", f"https://www.amazon.com/dp/{asin}?tag={config.PARTNER_TAG}")
+                product_url = item.get("detailPageUrl", f"https://www.amazon.com/dp/{asin}?tag={config.PARTNER_TAG}")
 
                 db.upsert_product(asin, title, image_url, product_url)
                 added += 1
