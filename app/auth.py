@@ -250,8 +250,22 @@ def _log_credential_lengths(raw_cid: str, raw_secret: str, cid: str, secret: str
         )
 
 
+_last_diagnostics_at: float = 0.0
+_DIAGNOSTICS_COOLDOWN = 300  # 5 minutes
+
+
 def _run_diagnostics(raw_cid: str, raw_secret: str, cid: str, secret: str) -> None:
-    """Run all diagnostic checks when OAuth fails with invalid_client."""
+    """Run all diagnostic checks when OAuth fails with invalid_client.
+    Skips if already run within the cooldown period to avoid log spam."""
+    global _last_diagnostics_at
+    import time
+    now = time.monotonic()
+    if now - _last_diagnostics_at < _DIAGNOSTICS_COOLDOWN:
+        logger.info("[Diagnostic] Skipping — already ran %.0fs ago (cooldown=%ds)",
+                    now - _last_diagnostics_at, _DIAGNOSTICS_COOLDOWN)
+        return
+    _last_diagnostics_at = now
+
     logger.info("=" * 60)
     logger.info("[Diagnostic] Running full OAuth diagnostics...")
     logger.info("=" * 60)
