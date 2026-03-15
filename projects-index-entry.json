@@ -1,0 +1,12 @@
+{
+  "name": "Amazon Pokemon TCG Alert Bot",
+  "repo": "https://github.com/amirbiron/Amazon-bot",
+  "tags": ["python", "telegram-bot", "amazon-api", "flask", "sqlite", "monitoring", "alerts", "web-scraping"],
+  "highlights": [
+    "מעקב אוטומטי אחר מוצרי Pokémon TCG באמזון עם התראות טלגרם",
+    "אינטגרציה עם Amazon Creators API (v2.1–v3.1) כולל OAuth מתקדם",
+    "פאנל הגדרות מאובטח עם הצפנת Fernet ל-credentials",
+    "המרת מטבע USD→ILS בזמן אמת וקאשינג חכם",
+    "תמיכה ב-deployment ל-Render, Docker ו-Linux systemd"
+  ]
+}
